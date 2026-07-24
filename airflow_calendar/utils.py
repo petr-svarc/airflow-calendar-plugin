@@ -97,13 +97,16 @@ def _format_duration(avg_seconds):
 
 
 def _build_history_data(recent_runs, date_attr, limit=5):
-    return [
-        {
+    history = []
+    for run in reversed(recent_runs[:limit]):
+        run_date = getattr(run, date_attr, None)
+        if run_date is None:
+            continue
+        history.append({
             "state": run.state,
-            "date": getattr(run, date_attr).strftime('%d/%m/%Y %H:%M'),
-        }
-        for run in reversed(recent_runs[:limit])
-    ]
+            "date": run_date.strftime('%d/%m/%Y %H:%M'),
+        })
+    return history
 
 
 def _make_calendar_event(dag, event_time, avg_seconds, bg_color, border_color,
@@ -148,13 +151,19 @@ def _timedelta_anchor_time(dag, recent_runs, date_attr):
     now_naive = datetime.now(dt_timezone.utc).replace(tzinfo=None)
 
     for run in recent_runs:
-        run_time = getattr(run, date_attr).replace(tzinfo=None)
+        run_date = getattr(run, date_attr, None)
+        if run_date is None:
+            continue
+        run_time = run_date.replace(tzinfo=None)
         if run_time <= now_naive:
             return run_time
 
-    if recent_runs:
+    for run in reversed(recent_runs):
+        run_date = getattr(run, date_attr, None)
+        if run_date is None:
+            continue
         # Airflow 2 may only have the next scheduled run before the first execution.
-        return getattr(recent_runs[-1], date_attr).replace(tzinfo=None)
+        return run_date.replace(tzinfo=None)
 
     next_dagrun = getattr(dag, 'next_dagrun', None)
     if next_dagrun is not None:
@@ -218,6 +227,7 @@ def build_calendar_events(session, dags, dagbag, date_col, date_attr):
 
         recent_runs = session.query(DagRun).filter(
             DagRun.dag_id == dag.dag_id,
+            date_col.isnot(None),
         ).order_by(desc(date_col)).limit(15).all()
 
         recent_success_runs = [
