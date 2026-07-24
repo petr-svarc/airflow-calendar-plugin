@@ -16,7 +16,7 @@ setup(
 
     install_requires=[
         "apache-airflow>=2.0.0",
-        "croniter==5.0.1",
+        "croniter>=6,<7",
         "fastapi"
     ],
     entry_points={
