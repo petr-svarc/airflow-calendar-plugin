@@ -65,8 +65,9 @@ class CalendarView(BaseView):
 
         dags = query.all()
         dagbag = DagBag(read_dags_from_db=True)
-        events = build_calendar_events(
-            session, dags, dagbag, date_col, date_attr)
+        # events = build_calendar_events(
+        #     session, dags, dagbag, date_col, date_attr)
+        events = build_calendar_events(session, dagbag)
 
         return self.render_template(
             "calendar.html",
