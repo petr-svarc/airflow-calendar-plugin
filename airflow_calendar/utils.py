@@ -268,60 +268,124 @@ def _add_timedelta_events(events, dag, schedule, schedule_delta, recent_runs,
 
 ########################################################################################################################
 
-def _build_dagrun_detail(dag, dag_date, scheduled_run, executed_run, dag_color):
-    return {
-        "dag_id": dag.dag_id,
-        "dag_date": dag_date.in_tz('UTC'),
-        "display_name": dag.dag_display_name,
-        "dag_color": dag_color,
-        "task_count": len(dag.task_ids),
-        "run_at": scheduled_run.run_after if scheduled_run else pendulum.instance(executed_run.start_date) if executed_run else None,
-        "dagrun_type": 'scheduled & executed' if scheduled_run and executed_run else 'scheduled' if scheduled_run else 'executed' if executed_run else None,
-        "schedule": dag.schedule_interval,
-        "timezone": dag.timezone,
-        "logical_date": scheduled_run.logical_date if scheduled_run else None,
-        "schedule_data_interval": pendulum.interval(pendulum.instance(scheduled_run.data_interval.start),
-                                                    pendulum.instance(scheduled_run.data_interval.end)
-                                                   ) if scheduled_run else None,
-        "run_state": executed_run.state if executed_run else 'no_run',
-        "execution_date": pendulum.instance(executed_run.execution_date) if executed_run else None,
-        "start_date": pendulum.instance(executed_run.start_date) if executed_run else None,
-        "end_date": (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()) if executed_run else None,
-        "run_duration": ( (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now())
-                         - pendulum.instance(executed_run.start_date)
-                        ) if executed_run else None,
-        "execution_data_interval": pendulum.interval(pendulum.instance(executed_run.data_interval_start),
-                                                     pendulum.instance(executed_run.data_interval_end)
-                                                    ) if executed_run else None,
-    }
+# def _build_dagrun_detail(dag, dag_date, scheduled_run, executed_run, dag_avg_runtime, history_runs, dag_color):
+#     # we don't want to build a dagrun detail for scheduled and not-executed run in the past
+#     #  * for the past we want to see the actuals only (w/ flag if the execution was based on schedule or not)
+#     #  * for the future we want to see the schedules
+#     if scheduled_run and not executed_run and scheduled_run.run_after < pendulum.now().set(hour=0, minute=0, second=0, microsecond=0):
+#         return None
+#     else:
+#         return {
+#             "dag_id": dag.dag_id,
+#             "dag_date": dag_date.in_tz('UTC'),
+#             "display_name": dag.dag_display_name,
+#             "dag_color": dag_color,
+#             "task_count": len(dag.task_ids),
+#             "average_runtime": dag_avg_runtime,
+#             "history_runs": history_runs,
+#             # `run at` is the time the DAG is scheduled at, unless this is just the run (w/o schedule), in which case it is the actual start time of the DAG's execution
+#             "run_at": scheduled_run.run_after if scheduled_run else pendulum.instance(executed_run.start_date) if executed_run else None,
+#             "dagrun_type": 'scheduled & executed' if scheduled_run and executed_run else 'scheduled' if scheduled_run else 'executed' if executed_run else None,
+#             "schedule": dag.schedule_interval,
+#             "timezone": dag.timezone,
+#             "logical_date": scheduled_run.logical_date if scheduled_run else None,
+#             "schedule_data_interval": pendulum.interval(pendulum.instance(scheduled_run.data_interval.start),
+#                                                         pendulum.instance(scheduled_run.data_interval.end)
+#                                                     ) if scheduled_run else None,
+#             "run_state": executed_run.state if executed_run else 'no run',
+#             "execution_date": pendulum.instance(executed_run.execution_date) if executed_run else None,
+#             "start_date": pendulum.instance(executed_run.start_date) if executed_run else None,
+#             "end_date": (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()) if executed_run else None,
+#             "run_duration": ( (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now())
+#                             - pendulum.instance(executed_run.start_date)
+#                             ) if executed_run else None,
+#             "execution_data_interval": pendulum.interval(pendulum.instance(executed_run.data_interval_start),
+#                                                         pendulum.instance(executed_run.data_interval_end)
+#                                                         ) if executed_run else None,
+#         }
 
-def _make_calendar_event(dagrun_detail):
-    return {
-        "title": dagrun_detail["display_name"] if "display_name" in dagrun_detail and dagrun_detail["display_name"] 
-                    else (dagrun_detail["dag_id"] if "dag_id" in dagrun_detail else 'N/A'),
-        "start": dagrun_detail["run_at"].set(microsecond=0).isoformat() if "run_at" in dagrun_detail and dagrun_detail["run_at"] else 'N/A',
-        "end": (  dagrun_detail["run_at"] 
-                + (dagrun_detail["run_duration"] if "run_duration" in dagrun_detail and dagrun_detail["run_duration"]
-                                                else pendulum.interval(pendulum.now().set(second=0, microsecond=0), pendulum.now().set(second=0, microsecond=0)))
-               ).set(microsecond=0).isoformat() 
-                if "run_at" in dagrun_detail and dagrun_detail["run_at"] else 'N/A',
-        "backgroundColor": dagrun_detail["dag_color"] if "dag_color" in dagrun_detail and dagrun_detail["dag_color"] else '#FFFFFF',
-        "borderColor": get_border_color(dagrun_detail["run_state"]) if "run_state" in dagrun_detail else '#FFFFFF',
-        "borderWidth": "3px",
-        "extendedProps": {
-            "status": dagrun_detail["run_state"] if "run_state" in dagrun_detail and dagrun_detail["run_state"] else 'no run',
-            "cron": ( (  dagrun_detail["schedule"] + ' (' 
-                       + (dagrun_detail["timezone"].name if "timezone" in dagrun_detail and dagrun_detail["timezone"] else 'UTC') 
-                       + ')'
-                      ) if isinstance(dagrun_detail["schedule"], str) else str(dagrun_detail["schedule"]) 
-                    ) if "schedule" in dagrun_detail else 'N/A',
-            "duration": (str(dagrun_detail["run_duration"].minutes) + 'm ' + str(dagrun_detail["run_duration"].remaining_seconds) + 's') 
-                        if "run_duration" in dagrun_detail and dagrun_detail["run_duration"] else '300s',
-            "dag_id": dagrun_detail["dag_id"] if "dag_id" in dagrun_detail else 'N/A',
-            "task_count": dagrun_detail["task_count"] if "task_count" in dagrun_detail else 'N/A',
-            "history": [],
-        },
-    }
+def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, history_runs, dag_color):
+
+    # we don't want to build a dagrun detail for scheduled and not-executed runs in the past
+    #  * for the past we want to see the actuals only (w/ flag if the execution was based on schedule or not)
+    #  * for the future we want to see the schedules
+    if scheduled_run and not executed_run and scheduled_run.run_after < pendulum.now().set(hour=0, minute=0, second=0, microsecond=0):
+
+        # don't generate a calendar event, if there is just a schedule and no execution and the scheduled run time is sooner than today
+        return None
+    
+    else:
+        # otherwise make a calendar event - these can be based on:
+        #  * scheduled and executed runs in the past
+        #  * only executed runs (without corresponding schedule entry) in the past (obviously)
+        #  * only scheduled runs (without executed run) in the future
+
+        # title of the calendar event: use the DAG's Display Name, and if not available use the DAG ID (the 'N/A' option should never be reached)
+        calev_title = dag.dag_display_name if dag.dag_display_name else (dag.dag_id if dag.dag_id else 'N/A')
+
+        # start time of the event - it is either: 
+        #  - the actual start time of the DAG's execution, if there is an execution (we need to convert it to Pendulum instance)
+        #  - the time the DAG is scheduled at, if this is just a schedule (w/o executed run)
+        # that means that history runs always show up in 
+        calev_start = pendulum.instance(executed_run.start_date) if executed_run else (scheduled_run.run_after if scheduled_run else None),
+
+        # end time of the event - it is either:
+        #  - the actual end of the DAG's execution (for executed runs)
+        #  - expected end time based on the average run time of previous executions (for not-executed runs)
+        calev_end = None
+        if executed_run:
+            # we need to convert the end datetime to Pendulum instance
+            # if there is no end date for the executed run, it is still running, so just use current time
+            calev_end = pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()
+        elif scheduled_run:
+            # if there is no executed run, but there is a schedule, use the schedule start time and an average run time
+            calev_end = scheduled_run.run_after + dag_avg_runtime
+
+        # run state is taken from the executed run or is set to 'no run'
+        calev_run_state = executed_run.state if executed_run else 'no run'
+
+        # the schedule of the DAG:
+        # it can be either a cron expression (string) or a timedelta object:
+        #  - cron expression is amended with timezone information based on the definition of the start date of the DAG,
+        #    because the cron expression triggers the DAG according to that timezone (if there is no timezone, use 'UTC')
+        #    TODO: the 'UTC' is an assumption that Airflow runs with the default locale, better would be to read the actual timezone from the Airflow's configuration (the `default_timezone` setting in the `[core]` section)
+        #  - timedelta object (or anything else) is just converted to its string representation
+        calev_schedule = 'N/A'
+        if isinstance(dag.schedule_interval, str):
+            calev_schedule = dag.schedule_interval + ' (' + dag.timezone if dag.timezone else 'UTC' + ')'
+        else:
+            calev_schedule = str(dag.schedule_interval)
+
+        # the duration of the run - it is either:
+        #  - the actual run time of the DAG's execution (for executed runs)
+        #  - the average run time of previous executions (for not-executed runs)
+        calev_duration = dag_avg_runtime
+        if executed_run:
+            # if there is no end date, the run is still being executed, so just use current time
+            calev_duration = (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()) - pendulum.instance(executed_run.start_date)
+
+        # number of DAG's task
+        calev_task_count = len(dag.task_ids)
+
+        return {
+            "title": calev_title,
+            "start": calev_start.set(microsecond=0).isoformat() if calev_start else 'N/A',
+            "end": calev_end.set(microsecond=0).isoformat() if calev_end else 'N/A',
+            # background color is determined based on user preferences (when merging data)
+            "backgroundColor": dag_color,
+            # border color is determined by the state of DAG's run
+            "borderColor": get_border_color(calev_run_state),
+            "borderWidth": "3px",
+            "extendedProps": {
+                "status": calev_run_state,
+                "cron": calev_schedule,
+                "duration": str(calev_duration.minutes) + 'm ' + str(calev_duration.remaining_seconds) + 's',
+                "dag_id": dag.dag_id if dag.dag_id else 'N/A',
+                "task_count": calev_task_count,
+                # list of last executed runs
+                "history": history_runs,
+            },
+        }
 
 def build_calendar_events(session, dagbag):
     events = []
@@ -340,34 +404,57 @@ def build_calendar_events(session, dagbag):
 
     # loop through DAGs
     for dag_id in dagbag.dag_ids:
+
         # get the DAG
         dag = dagbag.get_dag(dag_id, session)
+
+        # iterate over active and not-paused DAGs
         if dag and dag.get_is_active(session) and dag.get_is_paused(session) == False:
+
             # get DAG's scheduled runs for our timespan
             dagruns_scheduled = dag.iter_dagrun_infos_between(start_search, end_search)
             # get DAG's executed runs for our timespan
             dagruns_executed = dag.get_dagruns_between(start_search, end_search, session)
+
+            # determine the average runtime based on the selected previous runs
+            durations = [
+                (dagrun.end_date - dagrun.start_date).total_seconds()
+                for dagrun in dagruns_executed if dagrun.state == 'success'
+            ]
+            # default runtime is 5 minutes
+            dag_avg_runtime = pendulum.duration(seconds=int(sum(durations) / len(durations)) if durations else 300)
+
+            # get status of last 5 runs
+            history_runs = [
+                {
+                    "state": dagrun.state,
+                    "date": pendulum.instance(dagrun.start_date).strftime('%d/%m/%Y %H:%M'),
+                    # "date_iso": pendulum.instance(dagrun.start_date).set(microsecond=0).isoformat(),
+                }
+                for dagrun in sorted(dagruns_executed, key=lambda dagrun: dagrun.start_date)[-5:]
+            ]
 
             # now we can combine the scheduled runs and actual runs
             #  * obviously only the past schedules have a run
             #  * and there can be a manual run outside of the schedule
 
             # let's prepare a lookup dictionaries to merge the runs
-            scheduled_by_date = {pendulum.instance(dagrun_scheduled.logical_date): dagrun_scheduled for dagrun_scheduled in dagruns_scheduled}
-            executed_by_date = {pendulum.instance(dagrun_executed.execution_date): dagrun_executed for dagrun_executed in dagruns_executed}
+            scheduled_by_date = { pendulum.instance(dagrun_scheduled.logical_date): dagrun_scheduled for dagrun_scheduled in dagruns_scheduled }
+            executed_by_date = { pendulum.instance(dagrun_executed.execution_date): dagrun_executed for dagrun_executed in dagruns_executed }
             # and also a list of dates
             dag_dates = set(scheduled_by_date) | set(executed_by_date)
 
             # now merge them (FULL OUTER JOIN) and create calendar events
-            for dag_date in dag_dates:
-                events.append(
+            events.extend([
+                dagrun_detail 
+                for dagrun_detail in [
                     _make_calendar_event(
-                        _build_dagrun_detail(
-                            dag, dag_date, 
-                            scheduled_by_date.get(dag_date), executed_by_date.get(dag_date), 
-                            get_dag_color(dag.dag_id, dag_colors)
-                        )
+                        dag, scheduled_by_date.get(dag_date), executed_by_date.get(dag_date), 
+                        dag_avg_runtime, history_runs, get_dag_color(dag.dag_id, dag_colors)
                     )
-                )
+                    for dag_date in dag_dates
+                ] if dagrun_detail is not None
+            ])
+
 
     return events
