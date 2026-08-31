@@ -111,26 +111,24 @@ def _build_history_data(recent_runs, date_attr, limit=5):
     return history
 
 
-##### START
-def _make_calendar_event(dag, event_time, avg_seconds, bg_color, border_color,
-                         status, schedule, task_count, history_data):
-    return {
-        "title": dag.dag_id,
-        "start": event_time.isoformat() + 'Z',
-        "end": (event_time + timedelta(seconds=avg_seconds)).isoformat() + 'Z',
-        "backgroundColor": bg_color,
-        "borderColor": border_color,
-        "borderWidth": "3px",
-        "extendedProps": {
-            "status": status,
-            "cron": schedule if isinstance(schedule, str) else str(schedule),
-            "duration": _format_duration(avg_seconds),
-            "dag_id": dag.dag_id,
-            "task_count": int(task_count),
-            "history": history_data,
-        },
-    }
-##### END
+# def _make_calendar_event(dag, event_time, avg_seconds, bg_color, border_color,
+#                          status, schedule, task_count, history_data):
+#     return {
+#         "title": dag.dag_id,
+#         "start": event_time.isoformat() + 'Z',
+#         "end": (event_time + timedelta(seconds=avg_seconds)).isoformat() + 'Z',
+#         "backgroundColor": bg_color,
+#         "borderColor": border_color,
+#         "borderWidth": "3px",
+#         "extendedProps": {
+#             "status": status,
+#             "cron": schedule if isinstance(schedule, str) else str(schedule),
+#             "duration": _format_duration(avg_seconds),
+#             "dag_id": dag.dag_id,
+#             "task_count": int(task_count),
+#             "history": history_data,
+#         },
+#     }
 
 
 def _add_cron_events(events, dag, schedule, cron_start, cron_end, run_history,
@@ -202,70 +200,69 @@ def _add_timedelta_events(events, dag, schedule, schedule_delta, recent_runs,
 
 
 ##### START
-def build_calendar_events(session, dags, dagbag, date_col, date_attr):
-    events = []
-    now = timezone.utcnow()
-    start_search = now - timedelta(days=7)
-    end_search = now + timedelta(days=7)
+# def build_calendar_events(session, dags, dagbag, date_col, date_attr):
+#     events = []
+#     now = timezone.utcnow()
+#     start_search = now - timedelta(days=7)
+#     end_search = now + timedelta(days=7)
 
-    cron_start = start_search.replace(tzinfo=None)
-    cron_end = end_search.replace(tzinfo=None)
-    dag_colors = load_dag_colors()
+#     cron_start = start_search.replace(tzinfo=None)
+#     cron_end = end_search.replace(tzinfo=None)
+#     dag_colors = load_dag_colors()
 
-    for dag in dags:
-        if dag.dag_id in IGNORED_DAGS:
-            continue
+#     for dag in dags:
+#         if dag.dag_id in IGNORED_DAGS:
+#             continue
 
-        task_count = get_dag_task_count(session, dagbag, dag)
-        schedule = get_schedule_info(dag)
+#         task_count = get_dag_task_count(session, dagbag, dag)
+#         schedule = get_schedule_info(dag)
 
-        dag_runs = session.query(DagRun).filter(
-            DagRun.dag_id == dag.dag_id,
-            date_col >= start_search,
-            date_col <= end_search,
-        ).all()
+#         dag_runs = session.query(DagRun).filter(
+#             DagRun.dag_id == dag.dag_id,
+#             date_col >= start_search,
+#             date_col <= end_search,
+#         ).all()
 
-        run_history = {
-            getattr(run, date_attr).replace(tzinfo=None, microsecond=0).isoformat(): run.state
-            for run in dag_runs
-        }
+#         run_history = {
+#             getattr(run, date_attr).replace(tzinfo=None, microsecond=0).isoformat(): run.state
+#             for run in dag_runs
+#         }
 
-        recent_runs = session.query(DagRun).filter(
-            DagRun.dag_id == dag.dag_id,
-            date_col.isnot(None),
-        ).order_by(desc(date_col)).limit(15).all()
+#         recent_runs = session.query(DagRun).filter(
+#             DagRun.dag_id == dag.dag_id,
+#             date_col.isnot(None),
+#         ).order_by(desc(date_col)).limit(15).all()
 
-        recent_success_runs = [
-            run for run in recent_runs
-            if run.state == 'success' and run.end_date
-        ][:5]
-        avg_seconds = get_avg_execution_time(recent_success_runs)
-        history_data = _build_history_data(recent_runs, date_attr)
-        bg_color = get_dag_color(dag.dag_id, dag_colors)
+#         recent_success_runs = [
+#             run for run in recent_runs
+#             if run.state == 'success' and run.end_date
+#         ][:5]
+#         avg_seconds = get_avg_execution_time(recent_success_runs)
+#         history_data = _build_history_data(recent_runs, date_attr)
+#         bg_color = get_dag_color(dag.dag_id, dag_colors)
 
-        if schedule and isinstance(schedule, str) and croniter.is_valid(schedule):
-            try:
-                _add_cron_events(
-                    events, dag, schedule, cron_start, cron_end,
-                    run_history, avg_seconds, bg_color,
-                    task_count, history_data,
-                )
-            except Exception:
-                continue
-        else:
-            schedule_delta = parse_timedelta_schedule(schedule)
-            if schedule_delta:
-                try:
-                    _add_timedelta_events(
-                        events, dag, schedule, schedule_delta, recent_runs,
-                        date_attr, cron_start, cron_end, run_history,
-                        avg_seconds, bg_color, task_count, history_data,
-                    )
-                except Exception:
-                    continue
+#         if schedule and isinstance(schedule, str) and croniter.is_valid(schedule):
+#             try:
+#                 _add_cron_events(
+#                     events, dag, schedule, cron_start, cron_end,
+#                     run_history, avg_seconds, bg_color,
+#                     task_count, history_data,
+#                 )
+#             except Exception:
+#                 continue
+#         else:
+#             schedule_delta = parse_timedelta_schedule(schedule)
+#             if schedule_delta:
+#                 try:
+#                     _add_timedelta_events(
+#                         events, dag, schedule, schedule_delta, recent_runs,
+#                         date_attr, cron_start, cron_end, run_history,
+#                         avg_seconds, bg_color, task_count, history_data,
+#                     )
+#                 except Exception:
+#                     continue
 
-    return events
-##### END
+#     return events
 
 
 
