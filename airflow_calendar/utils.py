@@ -6,7 +6,6 @@ from croniter import croniter
 from sqlalchemy import desc
 
 import pendulum
-import logging
 
 from airflow.models import DagRun
 from airflow.models.serialized_dag import SerializedDagModel
@@ -16,8 +15,6 @@ from airflow_calendar.dag_colors import get_dag_color, load_dag_colors
 
 IGNORED_DAGS = ["airflow_monitoring"]
 RUNS_COUNT = 5000
-
-log = logging.getLogger(__name__)
 
 
 def parse_timedelta_schedule(schedule):
@@ -324,13 +321,13 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         #  * only scheduled runs (without executed run) in the future
 
         # title of the calendar event: use the DAG's Display Name, and if not available use the DAG ID (the 'N/A' option should never be reached)
-        calev_title = dag.dag_display_name if dag.dag_display_name else (dag.dag_id if dag.dag_id else 'N/A')
+        calev_title = dag.dag_display_name if dag.dag_display_name else dag.dag_id if dag.dag_id else 'N/A'
 
         # start time of the event - it is either: 
         #  - the actual start time of the DAG's execution, if there is an execution (we need to convert it to Pendulum instance)
         #  - the time the DAG is scheduled at, if this is just a schedule (w/o executed run)
         # that means that history runs always show up in 
-        calev_start = pendulum.instance(executed_run.start_date) if executed_run else (scheduled_run.run_after if scheduled_run else None),
+        calev_start = pendulum.instance(executed_run.start_date) if executed_run else scheduled_run.run_after if scheduled_run else None,
 
         # end time of the event - it is either:
         #  - the actual end of the DAG's execution (for executed runs)
@@ -436,7 +433,7 @@ def build_calendar_events(session, dagbag):
                 }
                 for dagrun in sorted(dagruns_executed, key=lambda dagrun: dagrun.start_date)[-5:]
             ]
-            log.warning('History Runs:', history_runs)
+            print('History Runs:', history_runs)
 
             # now we can combine the scheduled runs and actual runs
             #  * obviously only the past schedules have a run
