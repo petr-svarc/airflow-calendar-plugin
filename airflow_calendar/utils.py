@@ -6,7 +6,6 @@ from croniter import croniter
 from sqlalchemy import desc
 
 import pendulum
-from pprint import pprint
 
 from airflow.models import DagRun
 from airflow.models.serialized_dag import SerializedDagModel
@@ -329,7 +328,6 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         #  - the time the DAG is scheduled at, if this is just a schedule (w/o executed run)
         # that means that history runs always show up in 
         calev_start = pendulum.instance(executed_run.start_date) if executed_run else (scheduled_run.run_after if scheduled_run else None)
-        print(type(calev_start))
 
         # end time of the event - it is either:
         #  - the actual end of the DAG's execution (for executed runs)
@@ -354,7 +352,7 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         #  - timedelta object (or anything else) is just converted to its string representation
         calev_schedule = 'N/A'
         if isinstance(dag.schedule_interval, str):
-            calev_schedule = dag.schedule_interval + ' (' + dag.timezone.name if dag.timezone else 'UTC' + ')'
+            calev_schedule = dag.schedule_interval + ' (' + (dag.timezone.name if dag.timezone else 'UTC') + ')'
         else:
             calev_schedule = str(dag.schedule_interval)
 
@@ -364,7 +362,11 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         calev_duration = dag_avg_runtime
         if executed_run:
             # if there is no end date, the run is still being executed, so just use current time
-            calev_duration = (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()) - pendulum.instance(executed_run.start_date)
+            calev_duration = (pendulum.instance(executed_run.end_date) if executed_run.end_date else pendulum.now()
+                             ) - pendulum.instance(executed_run.start_date)
+        # and make a readable representation
+        calev_duration_str = ( (str(calev_duration.hours) + 'h ') if calev_duration.hours else ''
+                             ) + str(calev_duration.minutes) + 'm ' + str(calev_duration.remaining_seconds) + 's'
 
         # number of DAG's task
         calev_task_count = len(dag.task_ids)
@@ -381,7 +383,7 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
             "extendedProps": {
                 "status": calev_run_state,
                 "cron": calev_schedule,
-                "duration": str(calev_duration.minutes) + 'm ' + str(calev_duration.remaining_seconds) + 's',
+                "duration": calev_duration_str,
                 "dag_id": dag.dag_id if dag.dag_id else 'N/A',
                 "task_count": calev_task_count,
                 # list of last executed runs
@@ -435,7 +437,6 @@ def build_calendar_events(session, dagbag):
                 }
                 for dagrun in sorted(dagruns_executed, key=lambda dagrun: dagrun.start_date)[-5:]
             ]
-            print('History Runs:', history_runs)
 
             # now we can combine the scheduled runs and actual runs
             #  * obviously only the past schedules have a run
@@ -458,8 +459,5 @@ def build_calendar_events(session, dagbag):
                     for dag_date in dag_dates
                 ] if dagrun_detail is not None
             ])
-
-    print('***** EVENTS *****')
-    pprint(events)
 
     return events
