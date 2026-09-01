@@ -355,7 +355,7 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         #  - timedelta object (or anything else) is just converted to its string representation
         calev_schedule = 'N/A'
         if isinstance(dag.schedule_interval, str):
-            calev_schedule = dag.schedule_interval + ' (' + dag.timezone if dag.timezone else 'UTC' + ')'
+            calev_schedule = dag.schedule_interval + ' (' + dag.timezone.name if dag.timezone else 'UTC' + ')'
         else:
             calev_schedule = str(dag.schedule_interval)
 
