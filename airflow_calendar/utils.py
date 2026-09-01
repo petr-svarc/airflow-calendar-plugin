@@ -6,6 +6,7 @@ from croniter import croniter
 from sqlalchemy import desc
 
 import pendulum
+import logging
 
 from airflow.models import DagRun
 from airflow.models.serialized_dag import SerializedDagModel
@@ -15,6 +16,8 @@ from airflow_calendar.dag_colors import get_dag_color, load_dag_colors
 
 IGNORED_DAGS = ["airflow_monitoring"]
 RUNS_COUNT = 5000
+
+log = logging.getLogger(__name__)
 
 
 def parse_timedelta_schedule(schedule):
@@ -433,6 +436,7 @@ def build_calendar_events(session, dagbag):
                 }
                 for dagrun in sorted(dagruns_executed, key=lambda dagrun: dagrun.start_date)[-5:]
             ]
+            log.warning('History Runs:', history_runs)
 
             # now we can combine the scheduled runs and actual runs
             #  * obviously only the past schedules have a run
