@@ -6,6 +6,7 @@ from croniter import croniter
 from sqlalchemy import desc
 
 import pendulum
+from pprint import pprint
 
 from airflow.models import DagRun
 from airflow.models.serialized_dag import SerializedDagModel
@@ -321,13 +322,14 @@ def _make_calendar_event(dag, scheduled_run, executed_run, dag_avg_runtime, hist
         #  * only scheduled runs (without executed run) in the future
 
         # title of the calendar event: use the DAG's Display Name, and if not available use the DAG ID (the 'N/A' option should never be reached)
-        calev_title = dag.dag_display_name if dag.dag_display_name else dag.dag_id if dag.dag_id else 'N/A'
+        calev_title = dag.dag_display_name if dag.dag_display_name else (dag.dag_id if dag.dag_id else 'N/A')
 
         # start time of the event - it is either: 
         #  - the actual start time of the DAG's execution, if there is an execution (we need to convert it to Pendulum instance)
         #  - the time the DAG is scheduled at, if this is just a schedule (w/o executed run)
         # that means that history runs always show up in 
-        calev_start = pendulum.instance(executed_run.start_date) if executed_run else scheduled_run.run_after if scheduled_run else None,
+        calev_start = pendulum.instance(executed_run.start_date) if executed_run else (scheduled_run.run_after if scheduled_run else None)
+        print(type(calev_start))
 
         # end time of the event - it is either:
         #  - the actual end of the DAG's execution (for executed runs)
@@ -457,5 +459,7 @@ def build_calendar_events(session, dagbag):
                 ] if dagrun_detail is not None
             ])
 
+    print('***** EVENTS *****')
+    pprint(events)
 
     return events
